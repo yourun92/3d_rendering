@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>SVG to 3D (Improved Clarity)</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // Инициализация сцены, камеры и рендерера (минимальные изменения)
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f0f0);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000); // Изменен FOV на 60
+        camera.position.z = 50; // Увеличена дистанция камеры
+
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            powerPreference: "high-performance" // Добавлено для улучшения производительности
+        });
+        renderer.setPixelRatio(window.devicePixelRatio || 1); // Добавлено для четкости на HiDPI экранах
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Улучшенное освещение (сохраняя структуру)
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Увеличена интенсивность
+        directionalLight.position.set(1, 1, 1);
+        scene.add(directionalLight);
+
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.7); // Увеличена интенсивность
+        directionalLight2.position.set(-1, -1, -0.5); // Изменен угол
+        scene.add(directionalLight2);
+
+        // Контроллер (без изменений)
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Загрузка SVG из файла (без изменений)
+        const loader = new THREE.SVGLoader();
+        const svgPath = 'svg_file.svg';
+        const meshes = [];
+
+        // Функция для создания 3D модели (с улучшенными настройками экструзии)
+        function create3DFromSVG(svgData) {
+            // Улучшенные настройки экструзии
+            const extrudeSettings = {
+                depth: 200, // Уменьшена глубина для лучшей детализации
+                bevelEnabled: false, // Включен скос
+                bevelThickness: 3,
+                bevelSize: 1,
+                bevelSegments: 3,
+                curveSegments: 24 // Увеличены сегменты кривых
+            };
+
+            const svgGroup = new THREE.Group();
+
+            // Масштабирование (немного изменено)
+            svgGroup.scale.multiplyScalar(0.3); // Изменен масштаб
+            svgGroup.position.x = -10;
+            svgGroup.position.y = 10;
+            svgGroup.rotation.x = Math.PI;
+
+            // Обработка каждого пути в SVG (с улучшенным материалом)
+            svgData.paths.forEach(path => {
+                const shapes = path.toShapes(false);
+                const svgFill = path.userData.style.fill || '#00AAFF';
+                const color = new THREE.Color(svgFill);
+
+                shapes.forEach(shape => {
+                    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                    const material = new THREE.MeshPhongMaterial({
+                        color: color,
+                        side: THREE.DoubleSide,
+                        specular: 0x111111, // Добавлены блики
+                        shininess: 30, // Добавлена глянцевость
+                        flatShading: false // Сглаживание поверхностей
+                    });
+
+                    const mesh = new THREE.Mesh(geometry, material);
+                    svgGroup.add(mesh);
+                    meshes.push(mesh);
+                });
+            });
+
+            scene.add(svgGroup);
+
+        }
+
+        // Загрузка SVG файла (без изменений)
+        loader.load(
+            svgPath,
+            function(svgData) {
+                create3DFromSVG(svgData);
+
+                function animate() {
+                    requestAnimationFrame(animate);
+                    controls.update();
+                    renderer.render(scene, camera);
+                }
+                animate();
+            },
+            function(xhr) {
+                console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+            },
+            function(error) {
+                console.error('Error loading SVG:', error);
+                document.body.innerHTML = '<div style="padding:20px;color:red">Error loading SVG file. Please check console for details.</div>';
+            }
+        );
+
+        // Обработка изменения размера окна (без изменений)
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
