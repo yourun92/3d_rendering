@@ -12,6 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/geometries/TextGeometry.js"></script>
 
     <script>
         // Инициализация сцены, камеры и рендерера (минимальные изменения)
@@ -50,6 +51,7 @@
         const loader = new THREE.SVGLoader();
         const svgPath = 'svg_file.svg';
         const meshes = [];
+        let textMesh = null; // глобально, над create3DFromSVG
 
         // Функция для создания 3D модели (с улучшенными настройками экструзии)
         function create3DFromSVG(svgData) {
@@ -67,7 +69,7 @@
 
             // Масштабирование (немного изменено)
             svgGroup.scale.multiplyScalar(0.3); // Изменен масштаб
-            svgGroup.position.x = -10;
+            svgGroup.position.x = -30;
             svgGroup.position.y = 10;
             svgGroup.rotation.x = Math.PI;
 
@@ -90,7 +92,35 @@
                     const mesh = new THREE.Mesh(geometry, material);
                     svgGroup.add(mesh);
                     meshes.push(mesh);
+
+
                 });
+
+                // Добавляем сноску, если это path470
+                if (path.userData.node && path.userData.node.id === 'path470') {
+                    // Центр геометрии для размещения текста
+                    const bbox = new THREE.Box3().setFromObject(svgGroup);
+                    const center = bbox.getCenter(new THREE.Vector3());
+
+                    const fontLoader = new THREE.FontLoader();
+                    fontLoader.load('fonts/Spell_Regular.json', function(font) {
+                        const textGeometry = new THREE.TextGeometry('ДШВ 100 / 20', {
+                            font: font,
+                            size: 3,
+                            height: 1,
+                            curveSegments: 12
+                        });
+
+                        const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                        textMesh = new THREE.Mesh(textGeometry, textMaterial);
+
+                        textGeometry.computeBoundingBox();
+                        const textCenter = textGeometry.boundingBox.getCenter(new THREE.Vector3());
+                        textMesh.position.set(center.x - textCenter.x, center.y + 20, center.z + 10);
+
+                        scene.add(textMesh); // Добавляем вне svgGroup
+                    });
+}
             });
 
             scene.add(svgGroup);
@@ -106,6 +136,10 @@
                 function animate() {
                     requestAnimationFrame(animate);
                     controls.update();
+
+                    if (textMesh) {
+                        textMesh.lookAt(camera.position);
+                    }
                     renderer.render(scene, camera);
                 }
                 animate();
