@@ -1,129 +1,130 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <title>SVG to 3D (Improved Clarity)</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
-    </style>
+  <meta charset="utf-8">
+  <title>SVG to 3D (Improved Clarity)</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+  </style>
 </head>
 <body>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/geometries/TextGeometry.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/geometries/TextGeometry.js"></script>
 
-    <script>
-        // Инициализация сцены, камеры и рендерера (минимальные изменения)
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xf0f0f0);
+<script>
+  // Инициализация сцены, камеры и рендерера (минимальные изменения)
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf0f0f0);
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000); // Изменен FOV на 60
-        camera.position.z = 50; // Увеличена дистанция камеры
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000); // Изменен FOV на 60
+  camera.position.z = 50; // Увеличена дистанция камеры
 
-        const renderer = new THREE.WebGLRenderer({
-            antialias: true,
-            powerPreference: "high-performance" // Добавлено для улучшения производительности
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: "high-performance" // Добавлено для улучшения производительности
+  });
+  renderer.setPixelRatio(window.devicePixelRatio || 1); // Добавлено для четкости на HiDPI экранах
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Улучшенное освещение (сохраняя структуру)
+  const ambientLight = new THREE.AmbientLight(0x404040);
+  scene.add(ambientLight);
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Увеличена интенсивность
+  directionalLight.position.set(1, 1, 1);
+  scene.add(directionalLight);
+
+  const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.7); // Увеличена интенсивность
+  directionalLight2.position.set(-1, -1, -0.5); // Изменен угол
+  scene.add(directionalLight2);
+
+  // Контроллер (без изменений)
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+
+  // Загрузка SVG из файла (без изменений)
+  const loader = new THREE.SVGLoader();
+  const svgPath = 'svg_file.svg';
+  const meshes = [];
+  let textMesh = null; // глобально, над create3DFromSVG
+
+  // Функция для создания 3D модели (с улучшенными настройками экструзии)
+  function create3DFromSVG(svgData) {
+    // Улучшенные настройки экструзии
+    const extrudeSettings = {
+      depth: 200, // Уменьшена глубина для лучшей детализации
+      bevelEnabled: false, // Включен скос
+      bevelThickness: 3,
+      bevelSize: 1,
+      bevelSegments: 3,
+      curveSegments: 24 // Увеличены сегменты кривых
+    };
+
+    const svgGroup = new THREE.Group();
+
+    // Масштабирование (немного изменено)
+    svgGroup.scale.multiplyScalar(0.3); // Изменен масштаб
+    svgGroup.position.x = -30;
+    svgGroup.position.y = 10;
+    svgGroup.rotation.x = Math.PI;
+
+    // Обработка каждого пути в SVG (с улучшенным материалом)
+    svgData.paths.forEach(path => {
+      const shapes = path.toShapes(false);
+      const svgFill = path.userData.style.fill || '#00AAFF';
+      const color = new THREE.Color(svgFill);
+
+      shapes.forEach(shape => {
+        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        const material = new THREE.MeshPhongMaterial({
+          color: color,
+          side: THREE.DoubleSide,
+          specular: 0x111111, // Добавлены блики
+          shininess: 30, // Добавлена глянцевость
+          flatShading: false // Сглаживание поверхностей
         });
-        renderer.setPixelRatio(window.devicePixelRatio || 1); // Добавлено для четкости на HiDPI экранах
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
 
-        // Улучшенное освещение (сохраняя структуру)
-        const ambientLight = new THREE.AmbientLight(0x404040);
-        scene.add(ambientLight);
-
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Увеличена интенсивность
-        directionalLight.position.set(1, 1, 1);
-        scene.add(directionalLight);
-
-        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.7); // Увеличена интенсивность
-        directionalLight2.position.set(-1, -1, -0.5); // Изменен угол
-        scene.add(directionalLight2);
-
-        // Контроллер (без изменений)
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-
-        // Загрузка SVG из файла (без изменений)
-        const loader = new THREE.SVGLoader();
-        const svgPath = 'svg_file.svg';
-        const meshes = [];
-        let textMesh = null; // глобально, над create3DFromSVG
-
-        // Функция для создания 3D модели (с улучшенными настройками экструзии)
-        function create3DFromSVG(svgData) {
-            // Улучшенные настройки экструзии
-            const extrudeSettings = {
-                depth: 200, // Уменьшена глубина для лучшей детализации
-                bevelEnabled: false, // Включен скос
-                bevelThickness: 3,
-                bevelSize: 1,
-                bevelSegments: 3,
-                curveSegments: 24 // Увеличены сегменты кривых
-            };
-
-            const svgGroup = new THREE.Group();
-
-            // Масштабирование (немного изменено)
-            svgGroup.scale.multiplyScalar(0.3); // Изменен масштаб
-            svgGroup.position.x = -30;
-            svgGroup.position.y = 10;
-            svgGroup.rotation.x = Math.PI;
-
-            // Обработка каждого пути в SVG (с улучшенным материалом)
-            svgData.paths.forEach(path => {
-                const shapes = path.toShapes(false);
-                const svgFill = path.userData.style.fill || '#00AAFF';
-                const color = new THREE.Color(svgFill);
-
-                shapes.forEach(shape => {
-                    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-                    const material = new THREE.MeshPhongMaterial({
-                        color: color,
-                        side: THREE.DoubleSide,
-                        specular: 0x111111, // Добавлены блики
-                        shininess: 30, // Добавлена глянцевость
-                        flatShading: false // Сглаживание поверхностей
-                    });
-
-                    const mesh = new THREE.Mesh(geometry, material);
-                    svgGroup.add(mesh);
-                    meshes.push(mesh);
+        const mesh = new THREE.Mesh(geometry, material);
+        svgGroup.add(mesh);
+        meshes.push(mesh);
 
 
-                });
+      });
 
-                // Добавляем сноску, если это path470
-                if (path.userData.node && path.userData.node.id === 'path470') {
-                    // Центр геометрии для размещения текста
-                    const bbox = new THREE.Box3().setFromObject(svgGroup);
-                    const center = bbox.getCenter(new THREE.Vector3());
+      // Добавляем сноску, если это path470
+      if (path.userData.node && path.userData.node.id === 'path646') {
+        // Центр геометрии для размещения текста
+        const bbox = new THREE.Box3().setFromObject(svgGroup);
+        const center = bbox.getCenter(new THREE.Vector3());
 
-                    const fontLoader = new THREE.FontLoader();
-                    fontLoader.load('fonts/Spell_Regular.json', function(font) {
-                        const textGeometry = new THREE.TextGeometry('ДШВ 100 / 20', {
-                            font: font,
-                            size: 3,
-                            height: 1,
-                            curveSegments: 12
-                        });
+        const fontLoader = new THREE.FontLoader();
+        fontLoader.load('fonts/Spell_Regular.json', function(font) {
+          const textGeometry = new THREE.TextGeometry('ДШВ 100 / 20', {
+            font: font,
+            size: 3,
+            height: 1,
+            curveSegments: 12
+          });
 
-                        const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-                        textMesh = new THREE.Mesh(textGeometry, textMaterial);
+          const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+          textMesh = new THREE.Mesh(textGeometry, textMaterial);
 
-                        textGeometry.computeBoundingBox();
-                        const textCenter = textGeometry.boundingBox.getCenter(new THREE.Vector3());
-                        textMesh.position.set(center.x - textCenter.x, center.y + 20, center.z + 10);
+          textGeometry.computeBoundingBox();
+          const textCenter = textGeometry.boundingBox.getCenter(new THREE.Vector3());
+          textMesh.position.set(center.x - textCenter.x, center.y + 20, center.z + 10);
 
-                        scene.add(textMesh); // Добавляем вне svgGroup
-                    });
-}
-            });
+          scene.add(textMesh); // Добавляем вне svgGroup
+        });
+      }
+    });
 
-            scene.add(svgGroup);
+    scene.add(svgGroup);
 
     // 🟩 Добавляем прямоугольник (винт) перед моделью
     const boxGeometry = new THREE.BoxGeometry(10, 5, 60);
@@ -135,38 +136,38 @@
 
   }
 
-        // Загрузка SVG файла (без изменений)
-        loader.load(
-            svgPath,
-            function(svgData) {
-                create3DFromSVG(svgData);
+  // Загрузка SVG файла (без изменений)
+  loader.load(
+    svgPath,
+    function(svgData) {
+      create3DFromSVG(svgData);
 
-                function animate() {
-                    requestAnimationFrame(animate);
-                    controls.update();
+      function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
 
-                    if (textMesh) {
-                        textMesh.lookAt(camera.position);
-                    }
-                    renderer.render(scene, camera);
-                }
-                animate();
-            },
-            function(xhr) {
-                console.log((xhr.loaded / xhr.total * 100) + '% loaded');
-            },
-            function(error) {
-                console.error('Error loading SVG:', error);
-                document.body.innerHTML = '<div style="padding:20px;color:red">Error loading SVG file. Please check console for details.</div>';
-            }
-        );
+        if (textMesh) {
+          textMesh.lookAt(camera.position);
+        }
+        renderer.render(scene, camera);
+      }
+      animate();
+    },
+    function(xhr) {
+      console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    },
+    function(error) {
+      console.error('Error loading SVG:', error);
+      document.body.innerHTML = '<div style="padding:20px;color:red">Error loading SVG file. Please check console for details.</div>';
+    }
+  );
 
-        // Обработка изменения размера окна (без изменений)
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
+  // Обработка изменения размера окна (без изменений)
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
 </body>
 </html>
