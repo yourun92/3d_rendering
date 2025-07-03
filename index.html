@@ -125,7 +125,15 @@
 
             scene.add(svgGroup);
 
-        }
+    // 🟩 Добавляем прямоугольник (винт) перед моделью
+    const boxGeometry = new THREE.BoxGeometry(10, 5, 60);
+    const boxMaterial = new THREE.MeshStandardMaterial({ color: 0x999999 });
+    const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial);
+    boxMesh.position.set(18.8, -0.73, -28); // Позиция перед моделью
+    scene.add(boxMesh);
+
+
+  }
 
         // Загрузка SVG файла (без изменений)
         loader.load(
