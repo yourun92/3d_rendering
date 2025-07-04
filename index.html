@@ -9,6 +9,7 @@
   </style>
 </head>
 <body>
+<!-- Подключаем необходимые библиотеки Three.js -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
@@ -16,93 +17,117 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/geometries/TextGeometry.js"></script>
 
 <script>
-  // Инициализация сцены, камеры и рендерера (минимальные изменения)
+  // 1. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ
+  // Создаем базовые элементы Three.js с оптимизированными параметрами
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf0f0f0);
 
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000); // Изменен FOV на 60
-  camera.position.z = 50; // Увеличена дистанция камеры
+  // Камера с увеличенным FOV для лучшего обзора
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.z = 50; // Отодвигаем камеру для обзора всей модели
 
+  // Рендерер с настройками для HiDPI-экранов
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
-    powerPreference: "high-performance" // Добавлено для улучшения производительности
+    powerPreference: "high-performance" // Приоритет производительности
   });
-  renderer.setPixelRatio(window.devicePixelRatio || 1); // Добавлено для четкости на HiDPI экранах
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  // Улучшенное освещение (сохраняя структуру)
+  // 2. ОСВЕЩЕНИЕ (3-точечная схема)
+  // - AmbientLight для базовой освещенности
   const ambientLight = new THREE.AmbientLight(0x404040);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Увеличена интенсивность
-  directionalLight.position.set(1, 1, 1);
-  scene.add(directionalLight);
+  // - Заполняющий свет (теплый оттенок)
+  const fillLight = new THREE.DirectionalLight(0xffddbb, 0.5);
+  fillLight.position.set(-5, -2, -5);
+  scene.add(fillLight);
 
-  const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.7); // Увеличена интенсивность
-  directionalLight2.position.set(-1, -1, -0.5); // Изменен угол
-  scene.add(directionalLight2);
+  // - Основной направленный свет (холодный оттенок)
+  const mainLight = new THREE.DirectionalLight(0xccddff, 0.8);
+  mainLight.position.set(5, 5, 5);
+  scene.add(mainLight);
 
-  // Контроллер (без изменений)
+  // 3. ЭЛЕМЕНТЫ УПРАВЛЕНИЯ
+  // OrbitControls для интерактивного вращения сцены
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
+  controls.enableDamping = true; // Плавное торможение
   controls.dampingFactor = 0.05;
 
-  // Загрузка SVG из файла (без изменений)
-  const loader = new THREE.SVGLoader();
-  const svgPath = 'svg_file.svg';
-  const meshes = [];
-  let textMesh = null; // глобально, над create3DFromSVG
+  // 4. ЗАГРУЗКА ТЕКСТУР
+  // Загрузчик текстур с настройками повторения
+  const textureLoader = new THREE.TextureLoader();
+  const concreteTexture = textureLoader.load('concrete.jpg')
+  concreteTexture.wrapS = THREE.RepeatWrapping;
+  concreteTexture.wrapT = THREE.RepeatWrapping;
+  concreteTexture.repeat.set(1, 1);
+  concreteTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-  // Функция для создания 3D модели (с улучшенными настройками экструзии)
+  // 5. ОСНОВНАЯ ЛОГИКА ПРИЛОЖЕНИЯ
+  const loader = new THREE.SVGLoader();
+  const svgPath = 'svg_file.svg'; // Путь к SVG-файлу
+  const meshes = []; // Массив для хранения созданных мешей
+  let textMesh = null; // Переменная для текстовой подписи
+
+  // Функция преобразования SVG в 3D
   function create3DFromSVG(svgData) {
-    // Улучшенные настройки экструзии
+    // Настройки экструзии для создания объема
     const extrudeSettings = {
-      depth: 200, // Уменьшена глубина для лучшей детализации
-      bevelEnabled: false, // Включен скос
+      depth: 200, // Толщина экструзии
+      bevelEnabled: false, // Отключен скос для четких краев
       bevelThickness: 3,
       bevelSize: 1,
       bevelSegments: 3,
-      curveSegments: 24 // Увеличены сегменты кривых
+      curveSegments: 24 // Количество сегментов кривых
     };
 
+    // Группа для всех элементов SVG
     const svgGroup = new THREE.Group();
-
-    // Масштабирование (немного изменено)
-    svgGroup.scale.multiplyScalar(0.3); // Изменен масштаб
+    svgGroup.scale.multiplyScalar(0.3);
     svgGroup.position.x = -30;
     svgGroup.position.y = 10;
-    svgGroup.rotation.x = Math.PI;
+    svgGroup.rotation.x = Math.PI; // Разворот на 180 градусов
 
-    // Обработка каждого пути в SVG (с улучшенным материалом)
+
+    // Обработка каждого пути в SVG
     svgData.paths.forEach(path => {
-      const shapes = path.toShapes(false);
-      const svgFill = path.userData.style.fill || '#00AAFF';
-      const color = new THREE.Color(svgFill);
+        const shapes = path.toShapes(false);
+        const svgFill = path.userData.style.fill || '#00AAFF'; // Цвет из SVG или по умолчанию
+        const color = new THREE.Color(svgFill);
 
-      shapes.forEach(shape => {
-        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        const material = new THREE.MeshPhongMaterial({
-          color: color,
-          side: THREE.DoubleSide,
-          specular: 0x111111, // Добавлены блики
-          shininess: 30, // Добавлена глянцевость
-          flatShading: false // Сглаживание поверхностей
+        // Проверяем, является ли текущий элемент нашим прямоугольником
+        const isRect1 = path.userData.node && path.userData.node.id === 'rect1';
+
+        // Создание меша для каждой формы
+        shapes.forEach(shape => {
+            const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+
+            // Создаем материал в зависимости от того, это rect1 или нет
+            const material = isRect1
+                ? new THREE.MeshPhongMaterial({
+                    map: concreteTexture, // Применяем текстуру бетона
+                    side: THREE.DoubleSide,
+                    specular: 0x111111,
+                    shininess: 30,
+                    flatShading: false
+                })
+                : new THREE.MeshPhongMaterial({
+                    color: color,
+                    side: THREE.DoubleSide,
+                    specular: 0x111111,
+                    shininess: 30,
+                    flatShading: false
+                });
+
+            const mesh = new THREE.Mesh(geometry, material);
+            svgGroup.add(mesh);
+            meshes.push(mesh);
         });
 
-        const mesh = new THREE.Mesh(geometry, material);
-        svgGroup.add(mesh);
-        meshes.push(mesh);
-
-
-      });
-
-      // Добавляем сноску, если это path470
-      if (path.userData.node && path.userData.node.id === 'path646') {
-        // Центр геометрии для размещения текста
-        const bbox = new THREE.Box3().setFromObject(svgGroup);
-        const center = bbox.getCenter(new THREE.Vector3());
-
+      // Добавление текстовой подписи для специфичного пути
+      if (path.userData.node && path.userData.node.id === 'path784') {
         const fontLoader = new THREE.FontLoader();
         fontLoader.load('fonts/Spell_Regular.json', function(font) {
           const textGeometry = new THREE.TextGeometry('ДШВ 100 / 20', {
@@ -115,37 +140,33 @@
           const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
           textMesh = new THREE.Mesh(textGeometry, textMaterial);
 
+          // Позиционирование текста относительно модели
           textGeometry.computeBoundingBox();
           const textCenter = textGeometry.boundingBox.getCenter(new THREE.Vector3());
-          textMesh.position.set(center.x - textCenter.x, center.y + 20, center.z + 10);
+          const bbox = new THREE.Box3().setFromObject(svgGroup);
+          const center = bbox.getCenter(new THREE.Vector3());
 
-          scene.add(textMesh); // Добавляем вне svgGroup
+          textMesh.position.set(center.x - textCenter.x, center.y + 20, center.z + 10);
+          scene.add(textMesh);
         });
       }
     });
 
     scene.add(svgGroup);
-
-    // 🟩 Добавляем прямоугольник (винт) перед моделью
-    const boxGeometry = new THREE.BoxGeometry(10, 5, 60);
-    const boxMaterial = new THREE.MeshStandardMaterial({ color: 0x999999 });
-    const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial);
-    boxMesh.position.set(18.8, -0.73, -28); // Позиция перед моделью
-    scene.add(boxMesh);
-
-
   }
 
-  // Загрузка SVG файла (без изменений)
+  // 6. ЗАГРУЗКА И ОБРАБОТКА SVG
   loader.load(
     svgPath,
     function(svgData) {
       create3DFromSVG(svgData);
 
+      // Функция анимации
       function animate() {
         requestAnimationFrame(animate);
         controls.update();
 
+        // Текст всегда повернут к камере
         if (textMesh) {
           textMesh.lookAt(camera.position);
         }
@@ -153,6 +174,7 @@
       }
       animate();
     },
+    // Коллбэки для отслеживания прогресса загрузки
     function(xhr) {
       console.log((xhr.loaded / xhr.total * 100) + '% loaded');
     },
@@ -162,7 +184,7 @@
     }
   );
 
-  // Обработка изменения размера окна (без изменений)
+  // 7. ОБРАБОТКА ИЗМЕНЕНИЯ РАЗМЕРА ОКНА
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();

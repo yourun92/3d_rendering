@@ -1,145 +1,205 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <title>Четкий 3D SVG</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; width: 100%; height: 100%; }
-    </style>
+  <meta charset="utf-8">
+  <title>SVG to 3D with PBR Textures</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+  </style>
 </head>
 <body>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/geometries/TextGeometry.js"></script>
 
-    <script>
-        // Инициализация сцены с улучшенными настройками
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xf0f0f0);
+<script>
+  // 1. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf0f0f0);
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 0, 100);
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.z = 50;
 
-        // Улучшенный рендерер с настройками антиалиасинга
-        const renderer = new THREE.WebGLRenderer({
-            antialias: true,
-            powerPreference: "high-performance"
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: "high-performance"
+  });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+
+  document.body.appendChild(renderer.domElement);
+
+  // 2. ОСВЕЩЕНИЕ
+  const ambientLight = new THREE.AmbientLight(0x404040);
+  scene.add(ambientLight);
+
+  const fillLight = new THREE.DirectionalLight(0xffddbb, 0.5);
+  fillLight.position.set(-5, -2, -5);
+  scene.add(fillLight);
+
+  const mainLight = new THREE.DirectionalLight(0xccddff, 0.8);
+  mainLight.position.set(5, 5, 5);
+  scene.add(mainLight);
+
+  // 3. ЭЛЕМЕНТЫ УПРАВЛЕНИЯ
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+
+  // 4. ЗАГРУЗКА PBR-ТЕКСТУР ДЛЯ БЕТОНА
+  const textureLoader = new THREE.TextureLoader();
+  const pbrTextures = {
+    color: textureLoader.load('textures/Concrete025_1K-JPG_Color.jpg'),
+    normal: textureLoader.load('textures/Concrete025_1K-JPG_NormalGL.jpg'),
+    roughness: textureLoader.load('textures/Concrete025_1K-JPG_Roughness.jpg')
+  };
+  textureLoader.magFilter = THREE.LinearFilter;
+  textureLoader.minFilter = THREE.LinearMipMapLinearFilter;
+
+  // Настройка текстур
+  Object.values(pbrTextures).forEach(tex => {
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  });
+
+  // 5. ОСНОВНАЯ ЛОГИКА
+  const loader = new THREE.SVGLoader();
+  const svgPath = 'svg_file.svg';
+  const meshes = [];
+  let textMesh = null;
+
+  function create3DFromSVG(svgData) {
+    const extrudeSettings = {
+      depth: 200,
+      bevelEnabled: false,
+      bevelThickness: 3,
+      bevelSize: 1,
+      bevelSegments: 3,
+      curveSegments: 24
+    };
+
+    const svgGroup = new THREE.Group();
+    svgGroup.scale.multiplyScalar(0.4);
+    svgGroup.position.x = -30;
+    svgGroup.position.y = 10;
+    svgGroup.rotation.x = Math.PI;
+
+    svgData.paths.forEach(path => {
+      const shapes = path.toShapes(false);
+      const svgFill = path.userData.style.fill || '#00AAFF';
+      const color = new THREE.Color(svgFill);
+
+      // Проверяем целевые прямоугольники
+      const isTargetRect = ['concrete_left', 'concrete_right'].includes(path.userData.node?.id);
+
+      shapes.forEach(shape => {
+        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+
+        // Корректировка UV для текстур
+        if (isTargetRect) {
+          geometry.computeBoundingBox();
+          const size = geometry.boundingBox.getSize(new THREE.Vector3());
+          const uvAttribute = geometry.attributes.uv;
+
+          const uvScale = 0.3; // Регулируйте этот параметр
+          for (let i = 0; i < uvAttribute.count; i++) {
+            uvAttribute.setXY(
+              i,
+              uvAttribute.getX(i) * size.x * uvScale,
+              uvAttribute.getY(i) * size.y * uvScale
+            );
+          }
+          Object.values(pbrTextures).forEach(tex => {
+            tex.repeat.set(0.01, 0.01); // Меньше значения = крупнее текстура
         });
-        renderer.setPixelRatio(window.devicePixelRatio || 1);
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.outputEncoding = THREE.sRGBEncoding;
-        document.body.appendChild(renderer.domElement);
+        }
 
-        // Усиленное освещение
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
-
-        const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.9);
-        directionalLight1.position.set(1, 1, 1);
-        directionalLight1.castShadow = true;
-        scene.add(directionalLight1);
-
-        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
-        directionalLight2.position.set(-1, -0.5, -1);
-        scene.add(directionalLight2);
-
-        // Контроллер с улучшенными настройками
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.1;
-        controls.screenSpacePanning = false;
-        controls.maxPolarAngle = Math.PI;
-
-        // Загрузка SVG
-        const loader = new THREE.SVGLoader();
-
-        // Вставьте ваш SVG здесь
-        const svgString = `svg_file.svg`;
-
-        function createSharp3DModel(svgData) {
-            // Улучшенные настройки экструзии
-            const extrudeSettings = {
-                depth: 20, // Уменьшил глубину для лучшей детализации
-                bevelEnabled: true,
-                bevelThickness: 1,
-                bevelSize: 0.5,
-                bevelSegments: 3,
-                curveSegments: 24, // Увеличил для гладкости
-                steps: 2
-            };
-
-            const svgGroup = new THREE.Group();
-
-            // Оптимальный масштаб
-            svgGroup.scale.set(0.1, 0.1, 0.1);
-            svgGroup.position.set(0, 0, 0);
-            svgGroup.rotation.x = Math.PI;
-
-            // Обработка путей с улучшенными материалами
-            svgData.paths.forEach(path => {
-                const shapes = path.toShapes(true);
-                const color = path.userData.style.fill ?
-                    new THREE.Color(path.userData.style.fill) :
-                    new THREE.Color(0x00aaff);
-
-                shapes.forEach(shape => {
-                    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-
-                    // Улучшенный материал
-                    const material = new THREE.MeshPhongMaterial({
-                        color: color,
-                        side: THREE.DoubleSide,
-                        specular: 0x111111,
-                        shininess: 30,
-                        flatShading: false // Для гладких поверхностей
-                    });
-
-                    const mesh = new THREE.Mesh(geometry, material);
-                    mesh.castShadow = true;
-                    mesh.receiveShadow = true;
-                    svgGroup.add(mesh);
-                });
+        const material = isTargetRect
+          ? new THREE.MeshStandardMaterial({
+              map: pbrTextures.color,
+              normalMap: pbrTextures.normal,
+              roughnessMap: pbrTextures.roughness,
+              aoMap: pbrTextures.ao,
+              metalness: 0.1,
+              roughness: 0.7,
+              side: THREE.DoubleSide
+            })
+          : new THREE.MeshPhongMaterial({
+              color: color,
+              side: THREE.DoubleSide,
+              specular: 0x111111,
+              shininess: 30
             });
 
-            // Центрирование модели
-            const box = new THREE.Box3().setFromObject(svgGroup);
-            const center = box.getCenter(new THREE.Vector3());
-            svgGroup.position.sub(center);
+        const mesh = new THREE.Mesh(geometry, material);
+        svgGroup.add(mesh);
+        meshes.push(mesh);
+      });
 
-            scene.add(svgGroup);
+      if (path.userData.node && path.userData.node.id === 'path784') {
+        const fontLoader = new THREE.FontLoader();
+        fontLoader.load('fonts/Spell_Regular.json', function(font) {
+          const textGeometry = new THREE.TextGeometry('ДШВ 100 / 20', {
+            font: font,
+            size: 3,
+            height: 1,
+            curveSegments: 12
+          });
 
-            // Автоматическое приближение камеры
-            const size = box.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const fov = camera.fov * (Math.PI / 180);
-            const cameraZ = Math.abs(maxDim / Math.sin(fov / 2));
-            camera.position.z = cameraZ * 1.5;
-            controls.update();
-        }
+          const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+          textMesh = new THREE.Mesh(textGeometry, textMaterial);
 
-        try {
-            const svgData = loader.parse(svgString);
-            createSharp3DModel(svgData);
-        } catch (e) {
-            console.error("SVG Error:", e);
-            document.body.innerHTML = '<div style="padding:20px;color:red">Ошибка обработки SVG. Проверьте консоль.</div>';
-        }
+          textGeometry.computeBoundingBox();
+          const textCenter = textGeometry.boundingBox.getCenter(new THREE.Vector3());
+          const bbox = new THREE.Box3().setFromObject(svgGroup);
+          const center = bbox.getCenter(new THREE.Vector3());
 
-        // Анимация
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            renderer.render(scene, camera);
-        }
-        animate();
-
-        // Адаптивный ресайз
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+          textMesh.position.set(center.x - textCenter.x, center.y + 20, center.z + 10);
+          scene.add(textMesh);
         });
-    </script>
+      }
+    });
+
+    scene.add(svgGroup);
+  }
+
+  // 6. ЗАГРУЗКА SVG
+  loader.load(
+    svgPath,
+    function(svgData) {
+      create3DFromSVG(svgData);
+
+      function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+
+        if (textMesh) {
+          textMesh.lookAt(camera.position);
+        }
+        renderer.render(scene, camera);
+      }
+      animate();
+    },
+    function(xhr) {
+      console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    },
+    function(error) {
+      console.error('Error loading SVG:', error);
+      document.body.innerHTML = '<div style="padding:20px;color:red">Error loading SVG file. Please check console for details.</div>';
+    }
+  );
+
+  // 7. ОБРАБОТКА РАЗМЕРА ОКНА
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
 </body>
 </html>
