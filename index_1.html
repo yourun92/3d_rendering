@@ -12,8 +12,6 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/geometries/TextGeometry.js"></script>
 
 <script>
   // 1. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ
@@ -29,20 +27,16 @@
   });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(window.innerWidth, window.innerHeight);
-
-
   document.body.appendChild(renderer.domElement);
 
+
   // 2. ОСВЕЩЕНИЕ
-  const ambientLight = new THREE.AmbientLight(0x404040);
-  scene.add(ambientLight);
+  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
+  hemiLight.position.set(0, 200, 0);
+  scene.add(hemiLight);
 
-  const fillLight = new THREE.DirectionalLight(0xffddbb, 0.5);
-  fillLight.position.set(-5, -2, -5);
-  scene.add(fillLight);
-
-  const mainLight = new THREE.DirectionalLight(0xccddff, 0.8);
-  mainLight.position.set(5, 5, 5);
+  const mainLight = new THREE.DirectionalLight(0xccddff, 0.5);
+  mainLight.position.set(5, 15, -10);
   scene.add(mainLight);
 
   // 3. ЭЛЕМЕНТЫ УПРАВЛЕНИЯ
@@ -50,21 +44,38 @@
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
 
-  // 4. ЗАГРУЗКА PBR-ТЕКСТУР ДЛЯ БЕТОНА
+  // 4. ЗАГРУЗКА ТЕКСТУР
   const textureLoader = new THREE.TextureLoader();
-  const pbrTextures = {
+
+  // Основная текстура бетона
+  const concreteTextures = {
     color: textureLoader.load('textures/Concrete025_1K-JPG_Color.jpg'),
     normal: textureLoader.load('textures/Concrete025_1K-JPG_NormalGL.jpg'),
     roughness: textureLoader.load('textures/Concrete025_1K-JPG_Roughness.jpg')
   };
-  textureLoader.magFilter = THREE.LinearFilter;
-  textureLoader.minFilter = THREE.LinearMipMapLinearFilter;
+
+  // Текстура для finish элементов
+  const rubberTextures = {
+    color: textureLoader.load('textures/rubber/color.jpg'),
+    normal: textureLoader.load('textures/rubber/normal.jpg'),
+    roughness: textureLoader.load('textures/rubber/rough.jpg')
+  };
+
+  const metalTextures = {
+    color: textureLoader.load('textures/metal/color.jpg'),
+    normal: textureLoader.load('textures/metal/normal.jpg'),
+    roughness: textureLoader.load('textures/metal/rough.jpg')
+  };
 
   // Настройка текстур
-  Object.values(pbrTextures).forEach(tex => {
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  [concreteTextures, rubberTextures, metalTextures].forEach(textureSet => {
+    Object.values(textureSet).forEach(tex => {
+      if (tex) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      }
+    });
   });
 
   // 5. ОСНОВНАЯ ЛОГИКА
@@ -85,7 +96,7 @@
 
     const svgGroup = new THREE.Group();
     svgGroup.scale.multiplyScalar(0.4);
-    svgGroup.position.x = -30;
+    svgGroup.position.x = -23;
     svgGroup.position.y = 10;
     svgGroup.rotation.x = Math.PI;
 
@@ -93,77 +104,118 @@
       const shapes = path.toShapes(false);
       const svgFill = path.userData.style.fill || '#00AAFF';
       const color = new THREE.Color(svgFill);
+      const elementId = path.userData.node?.id;
 
-      // Проверяем целевые прямоугольники
-      const isTargetRect = ['concrete_left', 'concrete_right'].includes(path.userData.node?.id);
+      // Определяем тип элемента
+      const isRubberElement = ['compens'].includes(elementId);
+      const isConcreteElement = ['concrete_left', 'concrete_right'].includes(elementId);
+      const isProfileElement = ['left_profile', 'right_profile'].includes(elementId);
 
       shapes.forEach(shape => {
         const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
 
         // Корректировка UV для текстур
-        if (isTargetRect) {
-          geometry.computeBoundingBox();
-          const size = geometry.boundingBox.getSize(new THREE.Vector3());
-          const uvAttribute = geometry.attributes.uv;
+        geometry.computeBoundingBox();
+        const size = geometry.boundingBox.getSize(new THREE.Vector3());
+        const uvAttribute = geometry.attributes.uv;
 
-          const uvScale = 0.3; // Регулируйте этот параметр
-          for (let i = 0; i < uvAttribute.count; i++) {
-            uvAttribute.setXY(
-              i,
-              uvAttribute.getX(i) * size.x * uvScale,
-              uvAttribute.getY(i) * size.y * uvScale
-            );
-          }
-          Object.values(pbrTextures).forEach(tex => {
-            tex.repeat.set(0.01, 0.01); // Меньше значения = крупнее текстура
-        });
+        const uvScale = 0.3;
+        for (let i = 0; i < uvAttribute.count; i++) {
+          uvAttribute.setXY(
+            i,
+            uvAttribute.getX(i) * size.x * uvScale,
+            uvAttribute.getY(i) * size.y * uvScale
+          );
         }
 
-        const material = isTargetRect
-          ? new THREE.MeshStandardMaterial({
-              map: pbrTextures.color,
-              normalMap: pbrTextures.normal,
-              roughnessMap: pbrTextures.roughness,
-              aoMap: pbrTextures.ao,
-              metalness: 0.1,
-              roughness: 0.7,
-              side: THREE.DoubleSide
-            })
-          : new THREE.MeshPhongMaterial({
-              color: color,
-              side: THREE.DoubleSide,
-              specular: 0x111111,
-              shininess: 30
-            });
+        // Создаем материал в зависимости от типа элемента
+        let material;
+        if (isRubberElement) {
+          // Материал для finish элементов
+          material = new THREE.MeshStandardMaterial({
+            map: rubberTextures.color,
+            normalMap: rubberTextures.normal,
+            roughnessMap: rubberTextures.roughness,
+            metalness: 0.0,
+            roughness: 0.7
+          });
+
+          // Настройка повторения текстуры для finish элементов
+          Object.values(rubberTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.01, 0.01);
+          });
+        }
+        else if (isConcreteElement) {
+          // Материал для concrete элементов
+          material = new THREE.MeshStandardMaterial({
+            map: concreteTextures.color,
+            normalMap: concreteTextures.normal,
+            roughnessMap: concreteTextures.roughness,
+            metalness: 0.1,
+            roughness: 0.7,
+            side: THREE.DoubleSide
+          });
+
+          // Настройка повторения текстуры для concrete элементов
+          Object.values(concreteTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.01, 0.01);
+          });
+        }
+        else if (isProfileElement) {
+          // Металлический материал для профилей
+          material = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(0xcccccc), // Явно задаем светло-серый цвет
+            metalness: 0.3, // Оптимальное значение металличности
+            roughness: 0.3,
+            envMapIntensity: 1.5, // Усиливаем отражения
+            side: THREE.DoubleSide
+
+          });
+
+          // Настройка повторения текстуры для concrete элементов
+          Object.values(metalTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.01, 0.01);
+          });
+        }
+        else {
+          // Материал по умолчанию для остальных элементов
+          material = new THREE.MeshPhongMaterial({
+            color: color,
+            side: THREE.DoubleSide,
+            specular: 0x111111,
+            shininess: 30
+          });
+        }
 
         const mesh = new THREE.Mesh(geometry, material);
         svgGroup.add(mesh);
         meshes.push(mesh);
       });
-
-      if (path.userData.node && path.userData.node.id === 'path784') {
-        const fontLoader = new THREE.FontLoader();
-        fontLoader.load('fonts/Spell_Regular.json', function(font) {
-          const textGeometry = new THREE.TextGeometry('ДШВ 100 / 20', {
-            font: font,
-            size: 3,
-            height: 1,
-            curveSegments: 12
-          });
-
-          const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
-          textMesh = new THREE.Mesh(textGeometry, textMaterial);
-
-          textGeometry.computeBoundingBox();
-          const textCenter = textGeometry.boundingBox.getCenter(new THREE.Vector3());
-          const bbox = new THREE.Box3().setFromObject(svgGroup);
-          const center = bbox.getCenter(new THREE.Vector3());
-
-          textMesh.position.set(center.x - textCenter.x, center.y + 20, center.z + 10);
-          scene.add(textMesh);
-        });
-      }
     });
+
+    // Добавление текста (если нужно)
+    if (document.getElementById('path784')) {
+      const fontLoader = new THREE.FontLoader();
+      fontLoader.load('fonts/Spell_Regular.json', function(font) {
+        const textGeometry = new THREE.TextGeometry('ДШВ 100 / 20', {
+          font: font,
+          size: 3,
+          height: 1,
+          curveSegments: 12
+        });
+
+        const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        textMesh = new THREE.Mesh(textGeometry, textMaterial);
+
+        textGeometry.computeBoundingBox();
+        const textCenter = textGeometry.boundingBox.getCenter(new THREE.Vector3());
+        const bbox = new THREE.Box3().setFromObject(svgGroup);
+        const center = bbox.getCenter(new THREE.Vector3());
+
+        textMesh.position.set(center.x - textCenter.x, center.y + 20, center.z + 10);
+        scene.add(textMesh);
+      });
+    }
 
     scene.add(svgGroup);
   }
@@ -177,10 +229,6 @@
       function animate() {
         requestAnimationFrame(animate);
         controls.update();
-
-        if (textMesh) {
-          textMesh.lookAt(camera.position);
-        }
         renderer.render(scene, camera);
       }
       animate();
