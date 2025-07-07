@@ -12,6 +12,8 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/MTLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/OBJLoader.js"></script>
 
 <script>
   // 1. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ
@@ -219,6 +221,47 @@
 
     scene.add(svgGroup);
   }
+
+  // 7. ЗАГРУЗКА МОДЕЛИ БОЛТА
+  const mtlLoader = new THREE.MTLLoader();
+  mtlLoader.setPath('models/bolt/'); // Папка, где лежат bolt.mtl и bolt.obj
+
+  mtlLoader.load('bolt.mtl', function(materials) {
+    materials.preload();
+
+    const objLoader = new THREE.OBJLoader();
+    objLoader.setMaterials(materials);
+    objLoader.setPath('models/bolt/');
+    objLoader.load('bolt.obj', function(object) {
+
+      // Подстрой размер
+      object.scale.set(1, 1, 1);
+      // Изменение цвета всех частей болта
+      object.traverse(function(child) {
+        if (child.isMesh && child.material) {
+          child.material.color.set(0xB4ADB4); // Стальной синий
+          // Или полностью заменить материал:
+          // child.material = new THREE.MeshStandardMaterial({color: 0x4682B4});
+        }
+      });
+
+
+
+      // Позиция относительно svgGroup
+      const leftProfile = meshes.find(m => m.userData?.id === 'left_profile');
+      if (leftProfile) {
+        const bbox = new THREE.Box3().setFromObject(leftProfile);
+        const center = bbox.getCenter(new THREE.Vector3());
+
+        object.position.copy(center);
+        object.position.z += 10; // Немного вынесен из глубины
+      } else {
+        object.position.set(-9, -1.6, -5);
+      }
+
+      scene.add(object);
+    });
+  });
 
   // 6. ЗАГРУЗКА SVG
   loader.load(
