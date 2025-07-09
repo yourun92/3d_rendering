@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SVG to 3D with PBR Textures</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/MTLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/OBJLoader.js"></script>
+
+<script>
+  // 1. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ
+  const scene = new THREE.Scene();
+  scene.background = null;
+
+  // Создаем градиентный фон (темный снизу, светлый сверху)
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+  gradient.addColorStop(0, '#f0f0f0'); // Верх - светлый
+  gradient.addColorStop(1, '#aaaaaa'); // Низ - темнее
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 256, 256);
+
+  scene.background = new THREE.CanvasTexture(canvas);
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.z = 50;
+
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: "high-performance"
+  });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // 2. ОСВЕЩЕНИЕ
+  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+  hemiLight.position.set(0, 200, 0);
+  scene.add(hemiLight);
+
+  const mainLight = new THREE.DirectionalLight(0xccddff, 0.5);
+  mainLight.position.set(13, 10, -15);
+  scene.add(mainLight);
+
+  const darkLight = new THREE.DirectionalLight(0x020202, -0.6); // Отрицательная интенсивность!
+  darkLight.position.set(0, -20, 0); // Светит снизу
+  scene.add(darkLight);
+
+  // 3. ЭЛЕМЕНТЫ УПРАВЛЕНИЯ
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+
+  // 4. ЗАГРУЗКА ТЕКСТУР
+  const textureLoader = new THREE.TextureLoader();
+
+  // Основная текстура бетона
+  const concreteTextures = {
+    color: textureLoader.load('textures/concrete/concrete.jpg'),
+    // normal: textureLoader.load('textures/normal.jpg'),
+    // roughness: textureLoader.load('textures/rough.jpg')
+  };
+
+  // Текстура для finish элементов
+  const rubberTextures = {
+    color: textureLoader.load('textures/rubber/color.jpg'),
+    normal: textureLoader.load('textures/rubber/normal.jpg'),
+    roughness: textureLoader.load('textures/rubber/rough.jpg')
+  };
+
+  const metalTextures = {
+    color: textureLoader.load('textures/metal/color.jpg'),
+    normal: textureLoader.load('textures/metal/normal.jpg'),
+    roughness: textureLoader.load('textures/metal/rough.jpg')
+  };
+
+  const finishTextures = {
+    color: textureLoader.load('textures/finish/color.jpg'),
+    normal: textureLoader.load('textures/finish/normal.jpg'),
+    roughness: textureLoader.load('textures/finish/rough.jpg')
+  };
+
+  const coverTextures = {
+    color: textureLoader.load('textures/cover/color.jpg'),
+    normal: textureLoader.load('textures/cover/normal.jpg'),
+    roughness: textureLoader.load('textures/cover/rough.jpg')
+  };
+
+
+
+  // Настройка текстур
+  [concreteTextures, rubberTextures, metalTextures, finishTextures, coverTextures].forEach(textureSet => {
+    Object.values(textureSet).forEach(tex => {
+      if (tex) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      }
+    });
+  });
+
+  // 5. ОСНОВНАЯ ЛОГИКА
+  const loader = new THREE.SVGLoader();
+  const svgPath = 'svg/Aquabarrier/def_seams/DSHL-0-040.svg';
+  const meshes = [];
+  let textMesh = null;
+
+  function create3DFromSVG(svgData) {
+    const extrudeSettings = {
+      depth: 200,
+      bevelEnabled: false,
+      bevelThickness: 3,
+      bevelSize: 1,
+      bevelSegments: 3,
+      curveSegments: 24
+    };
+
+    const svgGroup = new THREE.Group();
+    svgGroup.scale.multiplyScalar(0.4);
+    svgGroup.position.x = -23;
+    svgGroup.position.y = 10;
+    svgGroup.rotation.x = Math.PI;
+
+    svgData.paths.forEach(path => {
+      const shapes = path.toShapes(false);
+      const svgFill = path.userData.style.fill || '#00AAFF';
+      const color = new THREE.Color(svgFill);
+      const elementId = path.userData.node?.id;
+
+      // Определяем тип элемента
+      const isRubberElement = ['compensator'].includes(elementId);
+      const isConcreteElement = ['concrete_left', 'concrete_right'].includes(elementId);
+      const isProfileElement = ['profile_left', 'profile_right'].includes(elementId);
+      const isFinishElement = ['finish_left', 'finish_right'].includes(elementId);
+      const isCoverElement = ['cover_left', 'cover_right'].includes(elementId);
+
+      shapes.forEach(shape => {
+        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+
+        // Корректировка UV для текстур
+        geometry.computeBoundingBox();
+        const size = geometry.boundingBox.getSize(new THREE.Vector3());
+        const uvAttribute = geometry.attributes.uv;
+
+        const uvScale = 0.3;
+        for (let i = 0; i < uvAttribute.count; i++) {
+          uvAttribute.setXY(
+            i,
+            uvAttribute.getX(i) * size.x * uvScale,
+            uvAttribute.getY(i) * size.y * uvScale
+          );
+        }
+
+        // Создаем материал в зависимости от типа элемента
+        let material;
+        if (isRubberElement) {
+          // Материал для finish элементов
+          material = new THREE.MeshStandardMaterial({
+            map: rubberTextures.color,
+            normalMap: rubberTextures.normal,
+            roughnessMap: rubberTextures.roughness,
+            metalness: 0.0,
+            roughness: 0.7
+          });
+
+          // Настройка повторения текстуры для finish элементов
+          Object.values(rubberTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.01, 0.01);
+          });
+
+        }
+        else if (isConcreteElement) {
+          // Материал для concrete элементов
+          material = new THREE.MeshStandardMaterial({
+            map: concreteTextures.color,
+            normalMap: concreteTextures.normal,
+            roughnessMap: concreteTextures.roughness,
+            metalness: 0.1,
+            roughness: 0.7,
+            side: THREE.DoubleSide
+          });
+
+          // Настройка повторения текстуры для concrete элементов
+          Object.values(concreteTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.001, 0.001);
+          });
+        }
+        else if (isProfileElement) {
+          // Металлический материал для профилей
+          material = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(0xcccccc),
+            metalness: 0.4,
+            roughness: 0.3,
+            envMapIntensity: 1.5,
+            side: THREE.DoubleSide
+          });
+
+          Object.values(metalTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.01, 0.01);
+          });
+        }
+        else if (isFinishElement) {
+          // Финишный
+          const finishExtrudeSettings = {
+            depth: 200,
+            bevelEnabled: false,
+            bevelThickness: 3,
+            bevelSize: 1,
+            bevelSegments: 3,
+            curveSegments: 24
+          };
+
+          // Создаем геометрию с уменьшенной экструзией
+          const finishGeometry = new THREE.ExtrudeGeometry(shape, finishExtrudeSettings);
+
+          material = new THREE.MeshStandardMaterial({
+            // color: new THREE.Color(0xF8F8F8),
+            map: finishTextures.color,
+            normalMap: finishTextures.normal,
+            roughnessMap: finishTextures.roughness,
+            metalness: 0.1,
+            roughness: 0.7,
+            side: THREE.DoubleSide,
+          });
+
+          // Настройка повторения текстуры для concrete элементов
+          Object.values(finishTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.05, 0.05);
+          });
+
+          const mesh = new THREE.Mesh(finishGeometry, material);
+            svgGroup.add(mesh);
+            meshes.push(mesh);
+
+            return;
+        }
+        else if (isCoverElement) {
+          // Финишный
+          const coverExtrudeSettings = {
+            depth: 200,
+            bevelEnabled: false,
+            bevelThickness: 3,
+            bevelSize: 1,
+            bevelSegments: 3,
+            curveSegments: 24
+          };
+
+          // Создаем геометрию с уменьшенной экструзией
+          const coverGeometry = new THREE.ExtrudeGeometry(shape, coverExtrudeSettings);
+
+          material = new THREE.MeshStandardMaterial({
+            map: coverTextures.color,
+            normalMap: coverTextures.normal,
+            roughnessMap: coverTextures.roughness,
+            metalness: 0.1,
+            roughness: 0.7,
+            side: THREE.DoubleSide,
+          });
+
+          // Настройка повторения текстуры для concrete элементов
+          Object.values(coverTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.02, 0.02);
+          });
+
+          const mesh = new THREE.Mesh(coverGeometry, material);
+            svgGroup.add(mesh);
+            meshes.push(mesh);
+
+            return;
+        }
+        else {
+          material = new THREE.MeshPhongMaterial({
+            color: color,
+            side: THREE.DoubleSide,
+            specular: 0x111111,
+            shininess: 30
+          });
+        }
+
+        const mesh = new THREE.Mesh(geometry, material);
+        svgGroup.add(mesh);
+        meshes.push(mesh);
+      });
+    });
+
+    // Добавление текста
+      const fontLoader = new THREE.FontLoader();
+      fontLoader.load('fonts/Spell_Regular.json', function(font) {
+        const textGeometry = new THREE.TextGeometry(svgPath.split('/').pop().replace('.svg', ''), {
+          font: font,
+          size: 3,
+          height: 1,
+          curveSegments: 12
+        });
+
+        const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        textMesh = new THREE.Mesh(textGeometry, textMaterial);
+
+        textGeometry.computeBoundingBox();
+        const textCenter = textGeometry.boundingBox.getCenter(new THREE.Vector3());
+        const bbox = new THREE.Box3().setFromObject(svgGroup);
+        const center = bbox.getCenter(new THREE.Vector3());
+
+        textMesh.position.set(center.x - textCenter.x, center.y + 20, center.z + 10);
+        scene.add(textMesh);
+      });
+
+    scene.add(svgGroup);
+  }
+
+// 7. ЗАГРУЗКА МОДЕЛИ БОЛТА (с поддержкой левой и правой сторон)
+const mtlLoader = new THREE.MTLLoader();
+mtlLoader.setPath('models/bolt/');
+mtlLoader.load('4DIN7991M0416M(high).obj', function(materials) {
+  materials.preload();
+
+  const objLoader = new THREE.OBJLoader();
+  objLoader.setMaterials(materials);
+  objLoader.setPath('models/bolt/');
+
+  objLoader.load('4DIN7991M0416M(high).obj', function(object) {
+    // Настройка металлического материала
+    const metalMaterial = new THREE.MeshStandardMaterial({
+      color: 0xaaaaaa,
+      metalness: 0.6,
+      roughness: 0.3
+    });
+
+    // Получаем позиции из SVG
+    let screwLeftPos = { x: 0, y: 0 };
+    let screwRightPos = { x: 0, y: 0 };
+
+    loader.load(svgPath, function(svgData) {
+      svgData.paths.forEach(path => {
+        const pathId = path.userData.node?.id;
+        if (pathId === 'screw_left' || pathId === 'screw_right') {
+          const shapes = path.toShapes(false);
+          shapes.forEach(shape => {
+            const bbox = new THREE.Box2();
+            shape.getPoints().forEach(point => {
+              bbox.expandByPoint(new THREE.Vector2(point.x, point.y));
+            });
+
+            const center = {
+              x: (bbox.min.x + bbox.max.x) / 2,
+              y: (bbox.min.y + bbox.max.y) / 2
+            };
+
+            if (pathId === 'screw_left') {
+              screwLeftPos = center;
+            } else {
+              screwRightPos = center;
+            }
+          });
+        }
+      });
+
+      // Общие параметры
+      const boltCount = 5;
+      const zInterval = -18;
+      const startZ = -2;
+      const scaleFactor = 0.4;
+
+      // Смещения для левой и правой сторон
+      const leftOffset = { x: 0, y: -0.7 };
+      const rightOffset = { x: 0, y: -0.7 }; // Отрицательное смещение для правой стороны
+
+      // Функция для создания набора болтов
+      function createBolts(basePos, offset, side) {
+        for (let i = 0; i < boltCount; i++) {
+          const bolt = object.clone();
+
+          bolt.traverse(child => {
+            if (child.isMesh) child.material = metalMaterial.clone();
+          });
+
+          bolt.rotation.z = Math.PI * 1.5;
+          bolt.scale.set(0.3, 0.3, 0.3);
+
+          // Для правой стороны можно добавить дополнительное вращение если нужно
+          if (side === 'right') {
+            bolt.rotation.y = Math.PI; // Разворот на 180° для правой стороны
+          }
+
+          bolt.position.set(
+            (basePos.x * scaleFactor) - 23 + offset.x,
+            -(basePos.y * scaleFactor) + 10 + offset.y,
+            startZ + (i * zInterval)
+          );
+
+          scene.add(bolt);
+        }
+      }
+
+      // Создаем болты для левой и правой сторон
+      createBolts(screwLeftPos, leftOffset, 'left');
+      createBolts(screwRightPos, rightOffset, 'right');
+    });
+  });
+});
+
+  // ФУНКЦИЯ АНИМАЦИИ (без автомобиля)
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  // 6. ЗАГРУЗКА SVG И ЗАПУСК АНИМАЦИИ
+  loader.load(
+    svgPath,
+    function(svgData) {
+      create3DFromSVG(svgData);
+      animate(); // Запускаем анимацию после загрузки SVG
+    },
+    function(xhr) {
+      console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    },
+    function(error) {
+      console.error('Error loading SVG:', error);
+      document.body.innerHTML = '<div style="padding:20px;color:red">Error loading SVG file. Please check console for details.</div>';
+    }
+  );
+
+  // 7. ОБРАБОТКА РАЗМЕРА ОКНА
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
+</body>
+</html>

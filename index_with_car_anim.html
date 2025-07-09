@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SVG to 3D with PBR Textures</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/SVGLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/MTLLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/OBJLoader.js"></script>
+
+<script>
+  // 1. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf0f0f0);
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.z = 50;
+
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: "high-performance"
+  });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // 2. ОСВЕЩЕНИЕ
+  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
+  hemiLight.position.set(0, 200, 0);
+  scene.add(hemiLight);
+
+  const mainLight = new THREE.DirectionalLight(0xccddff, 0.5);
+  mainLight.position.set(5, 15, -10);
+  scene.add(mainLight);
+
+  // 3. ЭЛЕМЕНТЫ УПРАВЛЕНИЯ
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+
+  // 4. ЗАГРУЗКА ТЕКСТУР
+  const textureLoader = new THREE.TextureLoader();
+
+  // Основная текстура бетона
+  const concreteTextures = {
+    color: textureLoader.load('textures/Concrete025_1K-JPG_Color.jpg'),
+    normal: textureLoader.load('textures/Concrete025_1K-JPG_NormalGL.jpg'),
+    roughness: textureLoader.load('textures/Concrete025_1K-JPG_Roughness.jpg')
+  };
+
+  // Текстура для finish элементов
+  const rubberTextures = {
+    color: textureLoader.load('textures/rubber/color.jpg'),
+    normal: textureLoader.load('textures/rubber/normal.jpg'),
+    roughness: textureLoader.load('textures/rubber/rough.jpg')
+  };
+
+  const metalTextures = {
+    color: textureLoader.load('textures/metal/color.jpg'),
+    normal: textureLoader.load('textures/metal/normal.jpg'),
+    roughness: textureLoader.load('textures/metal/rough.jpg')
+  };
+
+  // Настройка текстур
+  [concreteTextures, rubberTextures, metalTextures].forEach(textureSet => {
+    Object.values(textureSet).forEach(tex => {
+      if (tex) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      }
+    });
+  });
+
+  // 5. ОСНОВНАЯ ЛОГИКА
+  const loader = new THREE.SVGLoader();
+  const svgPath = 'svg_file.svg';
+  const meshes = [];
+  let textMesh = null;
+
+  function create3DFromSVG(svgData) {
+    const extrudeSettings = {
+      depth: 200,
+      bevelEnabled: false,
+      bevelThickness: 3,
+      bevelSize: 1,
+      bevelSegments: 3,
+      curveSegments: 24
+    };
+
+    const svgGroup = new THREE.Group();
+    svgGroup.scale.multiplyScalar(0.4);
+    svgGroup.position.x = -23;
+    svgGroup.position.y = 10;
+    svgGroup.rotation.x = Math.PI;
+
+    svgData.paths.forEach(path => {
+      const shapes = path.toShapes(false);
+      const svgFill = path.userData.style.fill || '#00AAFF';
+      const color = new THREE.Color(svgFill);
+      const elementId = path.userData.node?.id;
+
+      // Определяем тип элемента
+      const isRubberElement = ['compens'].includes(elementId);
+      const isConcreteElement = ['concrete_left', 'concrete_right'].includes(elementId);
+      const isProfileElement = ['left_profile', 'right_profile'].includes(elementId);
+      const isFinishElement = ['finish_left', 'finish_right'].includes(elementId);
+
+      shapes.forEach(shape => {
+        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+
+        // Корректировка UV для текстур
+        geometry.computeBoundingBox();
+        const size = geometry.boundingBox.getSize(new THREE.Vector3());
+        const uvAttribute = geometry.attributes.uv;
+
+        const uvScale = 0.3;
+        for (let i = 0; i < uvAttribute.count; i++) {
+          uvAttribute.setXY(
+            i,
+            uvAttribute.getX(i) * size.x * uvScale,
+            uvAttribute.getY(i) * size.y * uvScale
+          );
+        }
+
+        // Создаем материал в зависимости от типа элемента
+        let material;
+        if (isRubberElement) {
+          // Материал для finish элементов
+          material = new THREE.MeshStandardMaterial({
+            map: rubberTextures.color,
+            normalMap: rubberTextures.normal,
+            roughnessMap: rubberTextures.roughness,
+            metalness: 0.0,
+            roughness: 0.7
+          });
+
+          // Настройка повторения текстуры для finish элементов
+          Object.values(rubberTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.01, 0.01);
+          });
+        }
+        else if (isConcreteElement) {
+          // Материал для concrete элементов
+          material = new THREE.MeshStandardMaterial({
+            map: concreteTextures.color,
+            normalMap: concreteTextures.normal,
+            roughnessMap: concreteTextures.roughness,
+            metalness: 0.1,
+            roughness: 0.7,
+            side: THREE.DoubleSide
+          });
+
+          // Настройка повторения текстуры для concrete элементов
+          Object.values(concreteTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.01, 0.01);
+          });
+        }
+        else if (isProfileElement) {
+          // Металлический материал для профилей
+          material = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(0xcccccc),
+            metalness: 0.4,
+            roughness: 0.3,
+            envMapIntensity: 1.5,
+            side: THREE.DoubleSide
+          });
+
+          Object.values(metalTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.01, 0.01);
+          });
+        }
+        else {
+          material = new THREE.MeshPhongMaterial({
+            color: color,
+            side: THREE.DoubleSide,
+            specular: 0x111111,
+            shininess: 30
+          });
+        }
+
+        const mesh = new THREE.Mesh(geometry, material);
+        svgGroup.add(mesh);
+        meshes.push(mesh);
+      });
+    });
+
+    // Добавление текста
+    if (document.getElementById('path784')) {
+      const fontLoader = new THREE.FontLoader();
+      fontLoader.load('fonts/Spell_Regular.json', function(font) {
+        const textGeometry = new THREE.TextGeometry('ДШВ 100 / 20', {
+          font: font,
+          size: 3,
+          height: 1,
+          curveSegments: 12
+        });
+
+        const textMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        textMesh = new THREE.Mesh(textGeometry, textMaterial);
+
+        textGeometry.computeBoundingBox();
+        const textCenter = textGeometry.boundingBox.getCenter(new THREE.Vector3());
+        const bbox = new THREE.Box3().setFromObject(svgGroup);
+        const center = bbox.getCenter(new THREE.Vector3());
+
+        textMesh.position.set(center.x - textCenter.x, center.y + 20, center.z + 10);
+        scene.add(textMesh);
+      });
+    }
+
+    scene.add(svgGroup);
+  }
+
+  // 7. ЗАГРУЗКА МОДЕЛИ БОЛТА
+  const mtlLoader = new THREE.MTLLoader();
+  mtlLoader.setPath('models/bolt/');
+
+  mtlLoader.load('bolt.mtl', function(materials) {
+    materials.preload();
+
+    const objLoader = new THREE.OBJLoader();
+    objLoader.setMaterials(materials);
+    objLoader.setPath('models/bolt/');
+    objLoader.load('bolt.obj', function(object) {
+      object.scale.set(1, 1, 1);
+      object.traverse(function(child) {
+        if (child.isMesh && child.material) {
+          child.material.color.set(0xB4ADB4);
+        }
+      });
+
+      const leftProfile = meshes.find(m => m.userData?.id === 'left_profile');
+      if (leftProfile) {
+        const bbox = new THREE.Box3().setFromObject(leftProfile);
+        const center = bbox.getCenter(new THREE.Vector3());
+        object.position.copy(center);
+        object.position.z += 10;
+      } else {
+        object.position.set(-9.5, -1.6, -5);
+      }
+
+      scene.add(object);
+    });
+  });
+
+  // 8. ЗАГРУЗКА И АНИМАЦИЯ АВТОМОБИЛЯ
+  let carObject = null;
+  const carAnimation = {
+    speed: -0.3,
+    startX: 50,
+    endX: -50
+  };
+
+  const carMtlLoader = new THREE.MTLLoader();
+  carMtlLoader.setPath('models/car/');
+
+  carMtlLoader.load('car.obj', function(materials) {
+    materials.preload();
+
+    const objLoader = new THREE.OBJLoader();
+    objLoader.setMaterials(materials);
+    objLoader.setPath('models/car/');
+    objLoader.load('car.obj', function(object) {
+      carObject = object;
+      object.scale.set(2, 2, 2);
+      object.position.set(carAnimation.startX, 2, -20);
+
+      object.traverse(function(child) {
+        if (child.isMesh && child.material) {
+          child.material.color.set(0xB4ADB4);
+        }
+      });
+
+      scene.add(object);
+    });
+  });
+
+  // ЕДИНСТВЕННАЯ ФУНКЦИЯ АНИМАЦИИ
+  let carPassCount = 0;
+  const maxCarPasses = 2;
+  function animate() {
+    requestAnimationFrame(animate);
+
+    // Анимация автомобиля с ограничением по количеству проездов
+    if (carObject && carPassCount < maxCarPasses) {
+      carObject.position.x += carAnimation.speed;
+
+      if (carObject.position.x < carAnimation.endX) {
+        carPassCount++;
+        if (carPassCount >= maxCarPasses) {
+          scene.remove(carObject);
+          carObject = null;
+        } else {
+          carObject.position.x = carAnimation.startX;
+        }
+      }
+    }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+  // 6. ЗАГРУЗКА SVG И ЗАПУСК АНИМАЦИИ
+  loader.load(
+    svgPath,
+    function(svgData) {
+      create3DFromSVG(svgData);
+      animate(); // Запускаем анимацию после загрузки SVG
+    },
+    function(xhr) {
+      console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+    },
+    function(error) {
+      console.error('Error loading SVG:', error);
+      document.body.innerHTML = '<div style="padding:20px;color:red">Error loading SVG file. Please check console for details.</div>';
+    }
+  );
+
+  // 7. ОБРАБОТКА РАЗМЕРА ОКНА
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
+</body>
+</html>
