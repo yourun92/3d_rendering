@@ -34,9 +34,10 @@
   scene.background = new THREE.CanvasTexture(canvas);
 
   const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 500);
-  camera.position.z = 40;
-  camera.position.y = 40;
-  camera.position.x = -25;
+  camera.position.z = 30;
+  camera.position.y = 10;
+  camera.position.x = -17;
+
 
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -64,14 +65,6 @@
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
 
-  // const dir = new THREE.Vector3(1, 1, 0); // Направление стрелки
-  // const origin = new THREE.Vector3(0, 0, 0); // Начальная точка
-  // const length = 10; // Длина стрелки
-  // const hexColor = 0xff0000; // Цвет (красный)
-  //
-  // const arrowHelper = new THREE.ArrowHelper(dir, origin, length, hexColor);
-  // scene.add(arrowHelper);
-
   // 4. ЗАГРУЗКА ТЕКСТУР
   const textureLoader = new THREE.TextureLoader();
 
@@ -90,7 +83,7 @@
   };
 
   const metalTextures = {
-    color: textureLoader.load('textures/metal/Metal061B_1K-JPG_Color.jpg'),
+    color: textureLoader.load('textures/metal/color.jpg'),
     normal: textureLoader.load('textures/metal/normal.jpg'),
     roughness: textureLoader.load('textures/metal/rough.jpg')
   };
@@ -102,7 +95,7 @@
   };
 
   const coverTextures = {
-    color: textureLoader.load('textures/cover/floor-texture.jpg'),
+    color: textureLoader.load('textures/cover/color.jpg'),
     normal: textureLoader.load('textures/cover/normal.jpg'),
     roughness: textureLoader.load('textures/cover/rough.jpg')
   };
@@ -122,7 +115,7 @@
 
   // 5. ОСНОВНАЯ ЛОГИКА
   const loader = new THREE.SVGLoader();
-  const svgPath = 'svg/Aquabarrier/def_seams/DSHA/DSHA-75-193-corner.svg';
+  const svgPath = 'svg/Aquabarrier/def_seams/DSHL/DSHL-50-015-corner.svg';
   const meshes = [];
   let textMesh = null;
 
@@ -149,16 +142,15 @@
       const elementId = path.userData.node?.id;
 
       // Определяем тип элемента
-      const isCompensatorElement = elementId.startsWith('compensator') // проверка на группу
-      const isConcreteElement = elementId.startsWith('concrete')
-      const isProfileElement = elementId.startsWith('profile')
-      const isFinishElement = elementId.startsWith('finish')
-      const isFinishElementLeft = elementId.startsWith('finish_left')
-      const isFinishElementRight = elementId === 'finish_right'
-      const isCoverElement = elementId.startsWith('cover')
-      const isCoverElementLeft = elementId.startsWith('cover_left')
-      const isCoverElementRight = elementId === 'cover_right'
-      console.log(isFinishElementRight)
+      const isRubberElement = ['compensator'].includes(elementId);
+      const isConcreteElement = ['concrete_left', 'concrete_right'].includes(elementId);
+      const isProfileElement = ['profile_left', 'profile_right'].includes(elementId);
+      const isFinishElement = ['finish_left', 'finish_right'].includes(elementId);
+      const isFinishElementLeft = 'finish_left'.includes(elementId);
+      const isFinishElementRight = 'finish_right'.includes(elementId);
+      const isCoverElement = ['cover_left', 'cover_right'].includes(elementId);
+      const isCoverElementLeft = 'cover_left'.includes(elementId);
+      const isCoverElementRight = 'cover_right'.includes(elementId);
 
       shapes.forEach(shape => {
         const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
@@ -176,40 +168,23 @@
             uvAttribute.getY(i) * size.y * uvScale
           );
         }
-        const elementTitle = path.userData.node?.textContent.trim()
 
         // Создаем материал в зависимости от типа элемента
         let material;
-        if (isCompensatorElement) {
+        if (isRubberElement) {
           // Материал для finish элементов
-          if (elementTitle === 'metal') {
-            material = new THREE.MeshStandardMaterial({
-              map: metalTextures.color,
-              normalMap: metalTextures.normal,
-              roughnessMap: metalTextures.roughness,
-              metalness: 0.5,
-              roughness: 0.7
-            });
+          material = new THREE.MeshStandardMaterial({
+            map: rubberTextures.color,
+            normalMap: rubberTextures.normal,
+            roughnessMap: rubberTextures.roughness,
+            metalness: 0.0,
+            roughness: 0.7
+          });
 
-            // Настройка повторения текстуры для finish элементов
-            Object.values(metalTextures).forEach(tex => {
-              if (tex) tex.repeat.set(0.01, 0.01);
-            });
-          }
-          else {
-              material = new THREE.MeshStandardMaterial({
-              map: rubberTextures.color,
-              normalMap: rubberTextures.normal,
-              roughnessMap: rubberTextures.roughness,
-              metalness: 0.0,
-              roughness: 0.7
-            });
-
-              // Настройка повторения текстуры для finish элементов
-              Object.values(rubberTextures).forEach(tex => {
-                if (tex) tex.repeat.set(0.01, 0.01);
-              });
-          }
+          // Настройка повторения текстуры для finish элементов
+          Object.values(rubberTextures).forEach(tex => {
+            if (tex) tex.repeat.set(0.01, 0.01);
+          });
 
         }
         else if (isConcreteElement) {
@@ -231,23 +206,21 @@
         else if (isProfileElement) {
           // Металлический материал для профилей
           material = new THREE.MeshStandardMaterial({
-            map: metalTextures.color,
-            // normalMap: metalTextures.normal,
-            // roughnessMap: metalTextures.roughness,
-            metalness: 0.5,
+            color: new THREE.Color(0xcccccc),
+            metalness: 0.4,
             roughness: 0.3,
             envMapIntensity: 1.5,
             side: THREE.DoubleSide
           });
 
           Object.values(metalTextures).forEach(tex => {
-            if (tex) tex.repeat.set(0.001, 0.001);
+            if (tex) tex.repeat.set(0.01, 0.01);
           });
         }
         else if (isFinishElement) {
           // Финишный
           const finishExtrudeSettings = {
-            depth: isFinishElementRight && svgPath.endsWith('corner.svg') ? 200 : 200 - 20,
+            depth: isFinishElementLeft ? 200 - 20 : 200,
             bevelEnabled: false,
             bevelThickness: 3,
             bevelSize: 1,
@@ -274,16 +247,16 @@
           });
 
           const mesh = new THREE.Mesh(finishGeometry, material);
-          mesh.position.z = isFinishElementRight && svgPath.endsWith('corner.svg') ? 0 : 20;
-          svgGroup.add(mesh);
-          meshes.push(mesh);
+            mesh.position.z = isFinishElementLeft ? 20 : 0;
+            svgGroup.add(mesh);
+            meshes.push(mesh);
 
-          return;
+            return;
         }
         else if (isCoverElement) {
           // Финишный
           const coverExtrudeSettings = {
-            depth: isCoverElementRight && svgPath.endsWith('corner.svg') ? 200 : 200 - 20,
+            depth: isCoverElementLeft ? 200 - 20 : 200,
             bevelEnabled: false,
             bevelThickness: 3,
             bevelSize: 1,
@@ -309,11 +282,11 @@
           });
 
           const mesh = new THREE.Mesh(coverGeometry, material);
-          mesh.position.z = isCoverElementRight && svgPath.endsWith('corner.svg') ? 0 : 20;
-          svgGroup.add(mesh);
-          meshes.push(mesh);
+            mesh.position.z = isCoverElementLeft ? 20 : 0;
+            svgGroup.add(mesh);
+            meshes.push(mesh);
 
-          return;
+            return;
         }
         else {
           material = new THREE.MeshPhongMaterial({
@@ -348,145 +321,140 @@
         const bbox = new THREE.Box3().setFromObject(svgGroup);
         const center = bbox.getCenter(new THREE.Vector3());
 
-        textMesh.position.set(center.x - textCenter.x, center.y + 40, center.z + 10);
+        textMesh.position.set(center.x - textCenter.x, center.y + 30, center.z + 15);
         scene.add(textMesh);
       });
 
     scene.add(svgGroup);
   }
 
-
-
 // 7. ЗАГРУЗКА МОДЕЛИ БОЛТА (с поддержкой левой и правой сторон)
-async function loadBoltModels() {
-  const path = 'models/bolt/';
-  const scaleFactor = 0.4;
-  const materialSettings = {
-    color: 0xaaaaaa,
-    metalness: 0.6,
-    roughness: 0.3
-  };
-
-  // Загрузка материалов и моделей
-  const [boltMaterials, screwMaterials] = await Promise.all([
-    new Promise(resolve => new THREE.MTLLoader().setPath(path).load('bolt.mtl', resolve)),
-    new Promise(resolve => new THREE.MTLLoader().setPath(path).load('bolt.mtl', resolve))
-  ]);
-
+  const mtlLoader = new THREE.MTLLoader();
+  mtlLoader.setPath('models/bolt/');
+  mtlLoader.load('bolt.mtl', function(boltMaterials) {
   boltMaterials.preload();
-  screwMaterials.preload();
 
-  const objLoader = new THREE.OBJLoader();
-  const [boltObject, screwObject] = await Promise.all([
-    new Promise(resolve => {
-      objLoader.setMaterials(boltMaterials).setPath(path).load('bolt.obj', resolve);
-    }),
-    new Promise(resolve => {
-      objLoader.setMaterials(screwMaterials).setPath(path).load('screw.obj', resolve);
-    })
-  ]);
+  // Загружаем материалы для screw
+  const screwMtlLoader = new THREE.MTLLoader();
+  screwMtlLoader.setPath('models/bolt/');
+  screwMtlLoader.load('bolt.mtl', function(screwMaterials) {
+    screwMaterials.preload();
 
-  // Получаем позиции из SVG
-  const { leftPos, rightPos, useScrewLeft, useScrewRight } = await new Promise(resolve => {
-    loader.load(svgPath, svgData => {
-      const result = {
-        leftPos: { x: 0, y: 0 },
-        rightPos: { x: 0, y: 0 },
-        useScrewLeft: false,
-        useScrewRight: false
-      };
+    // Загружаем оба OBJ-файла
+    const objLoader = new THREE.OBJLoader();
 
-      svgData.paths.forEach(path => {
-        const pathId = path.userData.node?.id;
-        if (pathId === 'bolt_left' || pathId === 'screw_left' || pathId === 'bolt_right' || pathId === 'screw_right') {
-          const shapes = path.toShapes(false);
-          shapes.forEach(shape => {
-            const bbox = new THREE.Box2();
-            shape.getPoints().forEach(point => {
-              bbox.expandByPoint(new THREE.Vector2(point.x, point.y));
-            });
+    // Загружаем bolt.obj
+    objLoader.setMaterials(boltMaterials);
+    objLoader.setPath('models/bolt/');
+    objLoader.load('bolt.obj', function(boltObject) {
 
-            const center = {
-              x: (bbox.min.x + bbox.max.x) / 2,
-              y: (bbox.min.y + bbox.max.y) / 2
-            };
+      // Загружаем screw.obj
+      objLoader.setMaterials(screwMaterials);
+      objLoader.setPath('models/bolt/');
+      objLoader.load('screw.obj', function(screwObject) {
 
-            if (pathId === 'bolt_left' || pathId === 'screw_left') {
-              result.leftPos = center;
-              result.useScrewLeft = pathId === 'screw_left';
-            } else {
-              result.rightPos = center;
-              result.useScrewRight = pathId === 'screw_right';
+        // Настройка металлического материала для bolt
+        const boltMaterial = new THREE.MeshStandardMaterial({
+          color: 0xaaaaaa,
+          metalness: 0.6,
+          roughness: 0.3
+        });
+
+        // Настройка металлического материала для screw
+        const screwMaterial = new THREE.MeshStandardMaterial({
+          color: 0xaaaaaa,
+          metalness: 0.6,
+          roughness: 0.3
+        });
+
+        // Получаем позиции из SVG
+        let screwLeftPos = { x: 0, y: 0 };
+        let screwRightPos = { x: 0, y: 0 };
+
+        loader.load(svgPath, function(svgData) {
+          svgData.paths.forEach(path => {
+            const pathId = path.userData.node?.id;
+            if (pathId === 'bolt_left' || pathId === 'screw_right') {
+              const shapes = path.toShapes(false);
+              shapes.forEach(shape => {
+                const bbox = new THREE.Box2();
+                shape.getPoints().forEach(point => {
+                  bbox.expandByPoint(new THREE.Vector2(point.x, point.y));
+                });
+
+                const center = {
+                  x: (bbox.min.x + bbox.max.x) / 2,
+                  y: (bbox.min.y + bbox.max.y) / 2
+                };
+
+                if (pathId === 'bolt_left') {
+                  screwLeftPos = center;
+                } else {
+                  screwRightPos = center;
+                }
+              });
             }
           });
-        }
+
+          // Общие параметры
+          const boltCount = 5;
+          const zInterval = -18;
+          const startZ = -4;
+          const scaleFactor = 0.4;
+
+          // Смещения для левой и правой сторон
+          const leftOffset = { x: 0, y: -2.1 };
+          const rightOffset = { x: 0.3, y: 0 };
+
+          // Функция для создания болтов (левая сторона)
+          function createBolts(basePos, offset) {
+            for (let i = 0; i < boltCount; i++) {
+              const bolt = boltObject.clone();
+
+              bolt.traverse(child => {
+                if (child.isMesh) child.material = boltMaterial.clone();
+              });
+
+              bolt.scale.set(1.3, 1.3, 1.3);
+              bolt.position.set(
+                (basePos.x * scaleFactor) - 23 + offset.x,
+                -(basePos.y * scaleFactor) + 10 + offset.y,
+                startZ + (i * zInterval)
+              );
+
+              scene.add(bolt);
+            }
+          }
+
+          // Функция для создания винтов (правая сторона)
+          function createScrews(basePos, offset) {
+            for (let i = 0; i < boltCount; i++) {
+              const screw = screwObject.clone();
+
+              screw.traverse(child => {
+                if (child.isMesh) child.material = screwMaterial.clone();
+              });
+
+              screw.scale.set(0.3, 0.3, 0.3);
+              screw.rotation.y = Math.PI * 2; // Разворот на 180° для правой стороны
+              screw.position.set(
+                (basePos.x * scaleFactor) - 23 + offset.x,
+                -(basePos.y * scaleFactor) + 10 + offset.y,
+                startZ + (i * zInterval)
+              );
+
+              scene.add(screw);
+            }
+          }
+
+          // Создаем болты для левой стороны и винты для правой
+          createBolts(screwLeftPos, leftOffset);
+          createScrews(screwRightPos, rightOffset);
+        });
       });
-      resolve(result);
     });
   });
-
-  // Общие параметры
-  const boltCount = 5;
-  const zInterval = -18;
-  const startZ = -4;
-
-  // Смещения для болтов и винтов
-  const boltOffsetY = -2.1;
-  const offsets = {
-    left: { x: 0, y: boltOffsetY },
-    right: { x: 0.3, y: boltOffsetY }
-  };
-
-  // Определяем угол поворота для screw
-  const isCornerSVG = svgPath.endsWith('corner.svg');
-  const screwRotationY = isCornerSVG ? Math.PI * 2 : Math.PI;
-
-  // Функция для создания элементов
-  function createElements(object, basePos, offset, scale, isScrew = false) {
-    for (let i = 0; i < boltCount; i++) {
-      const element = object.clone();
-
-      element.traverse(child => {
-        if (child.isMesh) child.material = new THREE.MeshStandardMaterial(materialSettings);
-      });
-
-      element.scale.set(scale, scale, scale);
-      if (isScrew) {
-        element.rotation.y = screwRotationY;
-        // Для винтов не применяем смещение по Y
-        offset.y = 0;
-      }
-
-      element.position.set(
-        (basePos.x * scaleFactor) - 23 + offset.x,
-        -(basePos.y * scaleFactor) + 10 + offset.y,
-        startZ + (i * zInterval)
-      );
-
-      scene.add(element);
-    }
-  }
-
-  // Создаем элементы для левой стороны
-  createElements(
-    useScrewLeft ? screwObject : boltObject,
-    leftPos,
-    { ...offsets.left }, // Копируем объект offset
-    useScrewLeft ? 0.3 : 1.3,
-    useScrewLeft
-  );
-
-  // Создаем элементы для правой стороны
-  createElements(
-    useScrewRight ? screwObject : boltObject,
-    rightPos,
-    { ...offsets.right }, // Копируем объект offset
-    useScrewRight ? 0.3 : 1.3,
-    useScrewRight
-  );
-}
-
-loadBoltModels();
+});
 
   // ФУНКЦИЯ АНИМАЦИИ (без автомобиля)
   function animate() {
