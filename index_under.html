@@ -122,7 +122,7 @@
 
   // 5. ОСНОВНАЯ ЛОГИКА
   const loader = new THREE.SVGLoader();
-  const svgPath = 'svg/Aquabarrier/def_seams/DSHA/DSHA-75-193-corner.svg';
+  const svgPath = 'svg/Aquabarrier/def_seams/DSHM/DSHM-15-040-V2_049-corner.svg';
   const meshes = [];
   let textMesh = null;
 
@@ -247,7 +247,7 @@
         else if (isFinishElement) {
           // Финишный
           const finishExtrudeSettings = {
-            depth: isFinishElementRight && svgPath.endsWith('corner.svg') ? 200 : 200 - 20,
+            depth: isFinishElementRight && svgPath.endsWith('corner.svg') || svgPath.split('-')[1] == 0 ? 200 : 200 - 20,
             bevelEnabled: false,
             bevelThickness: 3,
             bevelSize: 1,
@@ -274,7 +274,7 @@
           });
 
           const mesh = new THREE.Mesh(finishGeometry, material);
-          mesh.position.z = isFinishElementRight && svgPath.endsWith('corner.svg') ? 0 : 20;
+          mesh.position.z = isFinishElementRight && svgPath.endsWith('corner.svg') || svgPath.split('-')[1] == 0? 0 : 20;
           svgGroup.add(mesh);
           meshes.push(mesh);
 
@@ -283,7 +283,7 @@
         else if (isCoverElement) {
           // Финишный
           const coverExtrudeSettings = {
-            depth: isCoverElementRight && svgPath.endsWith('corner.svg') ? 200 : 200 - 20,
+            depth: isCoverElementRight && svgPath.endsWith('corner.svg') || svgPath.split('-')[1] == 0 ? 200 : 200 - 20,
             bevelEnabled: false,
             bevelThickness: 3,
             bevelSize: 1,
@@ -309,7 +309,7 @@
           });
 
           const mesh = new THREE.Mesh(coverGeometry, material);
-          mesh.position.z = isCoverElementRight && svgPath.endsWith('corner.svg') ? 0 : 20;
+          mesh.position.z = isCoverElementRight && svgPath.endsWith('corner.svg') || svgPath.split('-')[1] == 0 ? 0 : 20;
           svgGroup.add(mesh);
           meshes.push(mesh);
 
@@ -358,6 +358,7 @@
 
 
 // 7. ЗАГРУЗКА МОДЕЛИ БОЛТА (с поддержкой левой и правой сторон)
+// Исправленная версия функции loadBoltModels()
 async function loadBoltModels() {
   const path = 'models/bolt/';
   const scaleFactor = 0.4;
@@ -393,7 +394,8 @@ async function loadBoltModels() {
         leftPos: { x: 0, y: 0 },
         rightPos: { x: 0, y: 0 },
         useScrewLeft: false,
-        useScrewRight: false
+        useScrewRight: false,
+        isRightScrewCorner: false // Добавляем флаг для углового screw_right
       };
 
       svgData.paths.forEach(path => {
@@ -417,6 +419,8 @@ async function loadBoltModels() {
             } else {
               result.rightPos = center;
               result.useScrewRight = pathId === 'screw_right';
+              // Проверяем, является ли это screw_right в угловом SVG
+              result.isRightScrewCorner = (pathId === 'screw_right') && svgPath.endsWith('corner.svg');
             }
           });
         }
@@ -434,15 +438,11 @@ async function loadBoltModels() {
   const boltOffsetY = -2.1;
   const offsets = {
     left: { x: 0, y: boltOffsetY },
-    right: { x: 0.3, y: boltOffsetY }
+    right: { x: 0.25, y: boltOffsetY }
   };
 
-  // Определяем угол поворота для screw
-  const isCornerSVG = svgPath.endsWith('corner.svg');
-  const screwRotationY = isCornerSVG ? Math.PI * 2 : Math.PI;
-
   // Функция для создания элементов
-  function createElements(object, basePos, offset, scale, isScrew = false) {
+  function createElements(object, basePos, offset, scale, isScrew = false, isRightCorner = false) {
     for (let i = 0; i < boltCount; i++) {
       const element = object.clone();
 
@@ -451,10 +451,18 @@ async function loadBoltModels() {
       });
 
       element.scale.set(scale, scale, scale);
+
       if (isScrew) {
-        element.rotation.y = screwRotationY;
-        // Для винтов не применяем смещение по Y
-        offset.y = 0;
+        // Применяем поворот только для винтов
+        if (isRightCorner) {
+          // Особый поворот для screw_right в угловом SVG
+          element.rotation.z = Math.PI * 2;
+        } else {
+          // Стандартный поворот для других винтов
+          element.rotation.z = Math.PI * 1.5;
+        }
+        // Корректировка смещения для винтов
+        offset.y = isRightCorner ? 0 : -0.2;
       }
 
       element.position.set(
@@ -471,7 +479,7 @@ async function loadBoltModels() {
   createElements(
     useScrewLeft ? screwObject : boltObject,
     leftPos,
-    { ...offsets.left }, // Копируем объект offset
+    { ...offsets.left },
     useScrewLeft ? 0.3 : 1.3,
     useScrewLeft
   );
@@ -480,9 +488,10 @@ async function loadBoltModels() {
   createElements(
     useScrewRight ? screwObject : boltObject,
     rightPos,
-    { ...offsets.right }, // Копируем объект offset
+    { ...offsets.right },
     useScrewRight ? 0.3 : 1.3,
-    useScrewRight
+    useScrewRight,
+    useScrewRight && svgPath.endsWith('corner.svg') // Передаем флаг углового screw_right
   );
 }
 
